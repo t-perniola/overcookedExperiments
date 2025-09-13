@@ -1,15 +1,14 @@
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv, Overcooked
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
-from tensorflow.keras.layers import Flatten, Dense, Input, Dropout
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras import models
 from tensorflow.summary import create_file_writer
+from tensorflow.keras.models import load_model
 import datetime
 import random
 import numpy as np
 import matplotlib.pyplot as plt
-import tensorflow as tf
 import imageio
+import tensorflow as tf
+
 # utils.py
 # This file contains utility functions and classes for Overcooked environments
 
@@ -63,9 +62,61 @@ def render_env(env):
     plt.axis('off')
     plt.show()
 
+def epsilon_greedy(probs):
+    epsilon = 0.01
+    if random.random() < epsilon:
+        action = np.random.randint(len(probs))  # uniform random
+    else:
+        action = np.argmax(probs)
+    return action
+
+def rollout_with_gif(env_name, actor, gif_path="episode.gif", episodes=1, sampling_type="categorical"):
+    env = GeneralizedOvercooked([env_name])
+    steps = env.cur_env.base_env.horizon
+    frames = []
+
+    for _ in range(episodes):
+        obs = env.reset()
+        obs = obs["both_agent_obs"]
+        done = False
+        step = 0
+        frames.append(env.render())  # Initial frame
+
+        while not done and step < steps:
+            obs_A1 = obs[0]
+            obs_A2 = obs[1]
+
+            action_probs_A1 = actor.predict(np.array([obs_A1]), verbose=0)[0]
+            action_probs_A2 = actor.predict(np.array([obs_A2]), verbose=0)[0]
+
+            if sampling_type == "categorical":
+                action_A1 = tf.random.categorical(tf.math.log([action_probs_A1]), 1)[0, 0].numpy()
+                action_A2 = tf.random.categorical(tf.math.log([action_probs_A2]), 1)[0, 0].numpy()
+            else:
+                action_A1 = epsilon_greedy(action_probs_A1)
+                action_A2 = epsilon_greedy(action_probs_A2)
+
+            next_obs, _, done, _ = env.step((action_A1, action_A2))
+            obs = next_obs["both_agent_obs"]
+            frames.append(env.render())
+            step += 1
+
+    imageio.mimsave(f"../{gif_path}", frames, fps=5)
+    print(f"GIF saved as {gif_path}")
+
+def save_models(mappo, actor_name, critic_name):
+    mappo.actor_model.save(f"../saved_models/{actor_name}.keras")
+    mappo.critic_model.save(f"../saved_models/{critic_name}.keras")
+
+def load_models(actor_name, critic_name):
+    actor = load_model(f"../saved_models/{actor_name}.keras")
+    critic = load_model(f"../saved_models/{critic_name}.keras")
+    return actor, critic
+
+
 # --------------------------- RL ALGO -------------------------------------
-# MAPPO
-class MAPPO:
+# MAPPO: Try 1
+class MAPPO_v0:
     def __init__(self, env, input_shape, action_dim, num_agents=2, fine_tune=False):
         self.env = env
         self.obs_dim = input_shape[0]
