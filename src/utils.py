@@ -27,9 +27,23 @@ class GeneralizedOvercooked:
         self.cur_env = self.envs[0]
         self.observation_space, self.action_space = self.cur_env.observation_space, self.cur_env.action_space
 
-    def reset(self):
-        idx = random.randint(0, len(self.envs)-1)
-        self.cur_env = self.envs[idx]
+    def reset(self, idx=None, force_random=False):
+        """
+        Reset the environment.
+        - If idx is given → switch to that env and reset.
+        - If force_random=True → sample a random env and reset.
+        - If neither → just reset the current env (self.cur_env).
+        """
+        if force_random:
+            idx = np.random.randint(0, len(self.envs))
+            self.cur_env = self.envs[idx]
+            return self.cur_env.reset()
+
+        if idx is not None:
+            self.cur_env = self.envs[idx]
+            return self.cur_env.reset()
+
+        # Default: reset current env, don't randomize
         return self.cur_env.reset()
     
     def step(self, *args):
@@ -101,7 +115,7 @@ def rollout_with_gif(env_name, actor, gif_path="episode.gif", episodes=1, sampli
             frames.append(env.render())
             step += 1
 
-    imageio.mimsave(f"../{gif_path}", frames, fps=5)
+    imageio.mimsave(f"../gifs/{gif_path}", frames, fps=5)
     print(f"GIF saved as {gif_path}")
 
 def save_models(mappo, actor_name, critic_name):
