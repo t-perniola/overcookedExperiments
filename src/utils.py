@@ -194,6 +194,51 @@ def rollout_with_gif(env_name, actor, gif_path="episode.gif", episodes=1, sampli
     imageio.mimsave(f"../gifs/{gif_path}", frames, fps=5)
     print(f"GIF saved as {gif_path}")
 
+def rollout_with_gif_unseen(env_name, actor, gif_path="episode.gif", sampling_type="categorical", thresh=10):
+    env = GeneralizedOvercooked([env_name])
+    steps = env.cur_env.base_env.horizon
+    frames = []
+    i = 0
+
+    while True:
+        obs = env.reset()
+        obs = obs["both_agent_obs"]
+        done = False
+        step = 0
+        frames = []
+        frames.append(env.render())  # Initial frame
+        ep_cum_rew = 0
+
+        while not done and step < steps:
+            obs_A1 = obs[0]
+            obs_A2 = obs[1]
+
+            action_probs_A1 = actor.predict(np.array([obs_A1]), verbose=0)[0]
+            action_probs_A2 = actor.predict(np.array([obs_A2]), verbose=0)[0]
+
+            if sampling_type == "categorical":
+                action_A1 = tf.random.categorical(tf.math.log([action_probs_A1]), 1)[0, 0].numpy()
+                action_A2 = tf.random.categorical(tf.math.log([action_probs_A2]), 1)[0, 0].numpy()
+            else:
+                action_A1 = epsilon_greedy(action_probs_A1)
+                action_A2 = epsilon_greedy(action_probs_A2)
+
+            next_obs, sparse_reward, done, info = env.step((action_A1, action_A2))
+            shaped_reward = info["shaped_r_by_agent"]
+            ep_cum_rew += sparse_reward + np.sum(shaped_reward)
+            obs = next_obs["both_agent_obs"]
+            frames.append(env.render())
+            step += 1
+
+        i += 1
+        print(f"Total reward episode {i}: {ep_cum_rew}")
+        if ep_cum_rew > thresh:  # Only save if a certain reward was achieved
+            break
+
+    imageio.mimsave(f"../gifs/{gif_path}", frames, fps=10)
+    print(f"GIF saved as {gif_path}")
+
+
 def save_models(mappo, actor_name, critic_name):
     mappo.actor_model.save(f"../saved_models/{actor_name}.keras")
     mappo.critic_model.save(f"../saved_models/{critic_name}.keras")

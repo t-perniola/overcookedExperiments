@@ -335,6 +335,7 @@ class MAPPO:
                 tf.summary.scalar("Return/Avg", avg_return, step=r)
                 self.writer.flush()
     
+    
 # Multi-head critic version of MAPPO
 class MAPPO_mh(MAPPO):
     def define_models(self, env_params):
